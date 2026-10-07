@@ -20,5 +20,20 @@ function sessionView(){let s=state.session,e=s.exercises[state.exercise],t=e.tar
 function planView(){return `<div class="wrap"><div class="sectionhead"><div><p class="eyebrow">REFERÊNCIAS DO TREINADOR</p><h2>Modelos de treino</h2><p>Os agrupamentos são preservados dos planos originais; não representam histórico de cargas.</p></div></div><div class="template-grid">${TEMPLATES.map(t=>`<article class="template-card"><div class="template-top"><span class="template-number">0${t.id}</span><span class="source-tag">${t.source}</span></div><h3>${t.label}</h3><p>${t.focus}</p><ol>${t.exerciseIds.map(id=>`<li>${ex(id).name}</li>`).join('')}</ol><button class="secondary" onclick="openWorkout(${t.id})">Abrir como treino →</button></article>`).join('')}</div><div class="note">Estes quatro modelos vêm do ficheiro de acompanhamento anterior. Os exercícios adicionais do <b>Peres 2025</b> estão disponíveis na Biblioteca para usarmos na construção de planos novos.</div></div>`}
 function libraryView(){let groups=['Todos',...new Set(EXERCISES.map(x=>x.group))],q=state.libraryQuery.toLowerCase(),items=EXERCISES.filter(x=>(state.libraryGroup==='Todos'||x.group===state.libraryGroup)&&x.name.toLowerCase().includes(q));return `<div class="wrap"><div class="sectionhead"><div><p class="eyebrow">DOIS PLANOS · UMA BIBLIOTECA</p><h2>Biblioteca de exercícios</h2><p>${EXERCISES.length} exercícios e variantes retirados dos dois ficheiros Excel.</p></div></div><div class="library-tools"><input id="librarySearch" placeholder="Pesquisar exercício…" value="${state.libraryQuery}" oninput="state.libraryQuery=this.value;render()"><div class="filter-chips">${groups.map(g=>`<button class="${g===state.libraryGroup?'active':''}" onclick="state.libraryGroup='${g}';render()">${g}</button>`).join('')}</div></div><div class="library-grid">${items.map(x=>`<article class="library-card"><div class="muscle">${x.group}</div><h3>${x.name}</h3><span class="source-tag">${x.source}</span></article>`).join('')}</div>${!items.length?'<div class="card empty"><h3>Sem resultados</h3><p>Experimenta outro nome ou grupo muscular.</p></div>':''}</div>`}
 function placeholder(name,icon,text){return `<div class="wrap"><div class="sectionhead"><div><h2>${name}</h2><p>Área preparada para a próxima fase.</p></div></div><div class="card empty"><div class="icon">${icon}</div><h3>${name}</h3><p>${text}</p></div></div>`}
-function render(){week.value=state.week;let map={dashboard:['Dashboard',dashboard()],workouts:['Treinos',workoutView()],session:['Treino em curso',sessionView()],plan:['Plano',planView()],library:['Biblioteca',libraryView()],progress:['Progresso',placeholder('Progresso','↗','Volume, cargas, recordes e estimativa de 1RM ao longo do tempo.')],body:['Corpo',placeholder('Corpo','◇','Peso, passos, medidas corporais e evolução semanal.')],nutrition:['Nutrição',placeholder('Nutrição','◉','Macros, calorias, água e acompanhamento nutricional.') ]};title.textContent=map[state.view][0];app.innerHTML=map[state.view][1]}
+function render(){
+  week.value=state.week;
+  const views={
+    dashboard:{title:'Dashboard',view:dashboard},
+    workouts:{title:'Treinos',view:workoutView},
+    session:{title:'Treino em curso',view:sessionView},
+    plan:{title:'Plano',view:planView},
+    library:{title:'Biblioteca',view:libraryView},
+    progress:{title:'Progresso',view:()=>placeholder('Progresso','↗','Volume, cargas, recordes e estimativa de 1RM ao longo do tempo.')},
+    body:{title:'Corpo',view:()=>placeholder('Corpo','◇','Peso, passos, medidas corporais e evolução semanal.')},
+    nutrition:{title:'Nutrição',view:()=>placeholder('Nutrição','◉','Macros, calorias, água e acompanhamento nutricional.')}
+  };
+  const current=views[state.view]||views.dashboard;
+  title.textContent=current.title;
+  app.innerHTML=current.view();
+}
 render();
