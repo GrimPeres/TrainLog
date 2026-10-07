@@ -6,5 +6,5 @@ const TEMPLATES=[
 {notes:'',video:'',id:3,name:'Treino 3',label:'Pernas + Core',focus:'Pernas · Glúteos · Core',exerciseIds:['squat','deadlift','lunges','rdl','calf','knee']},
 {notes:'',video:'',id:4,name:'Treino 4',label:'Upper misto',focus:'Peito · Costas · Braços · Ombros',exerciseIds:['incline-bb','chin-pull','pushup','chest-row','skull','curl-alt','lateral']}];
 const ex=id=>EXERCISES.find(x=>x.id===id);
-const makeWorkout=t=>({notes:'',video:'',id:t.id,name:t.name,focus:t.focus,exercises:t.exerciseIds.map(id=>({...ex(id),sets:3,reps:'12–15',load:'Registar',rpe:7,rest:'1:30'}))});
+const makeWorkout=t=>({notes:'',video:'',id:t.id,name:t.name,focus:t.focus,exercises:t.exerciseIds.map(id=>({...ex(id),sets:3,reps:'12–15',load:'',rpe:7,rest:'1:30'}))});
 const PLAN={name:'Plano actual',goal:'Hipertrofia / Força',weeks:12,workouts:TEMPLATES.map(makeWorkout)};
