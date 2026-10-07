@@ -69,3 +69,33 @@ select option{background:#fff;color:#202833;padding:7px 10px}
 /* Selector de exercícios personalizado */
 .exercise-picker{position:relative;flex:1;min-width:0}.picker-trigger{width:100%;height:38px;border:1px solid #dfe5eb;background:#fff;border-radius:9px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#3c4855;font-family:Inter,Arial,sans-serif;font-size:10px;font-weight:500;text-align:left;cursor:pointer}.picker-trigger:hover,.exercise-picker.open .picker-trigger{border-color:#9cc6ff;box-shadow:0 0 0 2px #eaf3ff}.picker-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.picker-trigger i{font-style:normal;color:#8a96a2;font-size:13px}.picker-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);width:min(390px,90vw);max-height:430px;background:#fff;border:1px solid #dfe5eb;border-radius:12px;box-shadow:0 16px 40px #18212b24;z-index:120;overflow:hidden}.exercise-picker.open .picker-menu{display:block}.picker-search{display:flex;align-items:center;gap:7px;padding:10px;border-bottom:1px solid var(--line);background:#fafbfc}.picker-search>span{color:#8c98a4;font-size:14px}.picker-search input{width:100%;border:1px solid #dfe5eb;border-radius:8px;background:#fff;padding:9px 10px;font-family:Inter,Arial,sans-serif;font-size:10px;font-weight:400;outline:0}.picker-search input:focus{border-color:var(--accent)}.picker-results{max-height:350px;overflow-y:auto;padding:6px}.picker-group>small{display:block;padding:9px 9px 5px;color:#8b97a3;font-family:Inter,Arial,sans-serif;font-size:7px;font-weight:800;letter-spacing:.7px;text-transform:uppercase}.picker-group button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:15px;border:0;background:#fff;border-radius:8px;padding:8px 9px;cursor:pointer;text-align:left;font-family:Inter,Arial,sans-serif}.picker-group button:hover,.picker-group button:focus{background:#eef6ff;outline:0}.picker-group button b{font-size:10px;font-weight:600;color:#26313d}.picker-group button span{font-size:7px;font-weight:500;color:#99a3ad;white-space:nowrap}.picker-empty{display:none;text-align:center;padding:25px 10px;color:var(--muted);font-size:9px}.add-exercise .exercise-picker{flex:1}.warmup-add .exercise-picker{width:250px;flex:none}
 @media(max-width:600px){.picker-menu{position:fixed;left:12px;right:12px;top:80px;width:auto;max-height:calc(100vh - 105px);z-index:180}.picker-results{max-height:calc(100vh - 175px)}.warmup-add .exercise-picker{width:100%}.picker-group button{padding:10px 9px}.picker-group button b{font-size:11px}}
+
+/* Aquecimento compacto, expansível */
+.warmup-accordion{background:#fff;border:1px solid #e2e7ed;border-radius:13px;margin:0 0 15px;overflow:visible}
+.warmup-accordion>summary{list-style:none;display:flex;align-items:center;gap:13px;cursor:pointer;padding:15px 18px;min-height:79px}
+.warmup-accordion>summary::-webkit-details-marker{display:none}
+.warmup-accordion>summary:focus-visible{outline:2px solid #2780ed;outline-offset:2px}
+.warmup-badge{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;background:#fff4dd;color:#c28a26;border-radius:11px;font-size:20px;font-weight:700}
+.warmup-summary-text{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.warmup-summary-text small{color:#bc8b3c;font-size:8px;letter-spacing:.7px;font-weight:800}
+.warmup-summary-text strong{font-size:13px;color:#25313d;font-weight:750}
+.warmup-summary-text>span{font-size:10px;color:#8b97a4}
+.warmup-summary-action{display:flex;align-items:center;gap:11px;color:#52657a;font-size:10px;font-weight:650;white-space:nowrap}
+.warmup-summary-action i{font-size:17px;font-style:normal;transition:transform .2s}
+.warmup-accordion[open] .warmup-summary-action i{transform:rotate(180deg)}
+.warmup-accordion[open]{border-color:#e9d8b6;box-shadow:0 8px 25px #18212b08}
+.warmup-accordion[open]>summary{border-bottom:1px solid #edf0f3}
+.warmup-accordion-body{padding:17px 18px 20px}
+.warmup-intro{font-size:10px;color:#7a8795;margin:0 0 16px}
+.warmup-stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:13px;align-items:start}
+.warmup-stage{border:1px solid #e8edf2;border-radius:11px;padding:13px;background:#fbfcfe;min-width:0}
+.warmup-stage-heading{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.warmup-stage-heading>span{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:#edf4ff;color:#2474df;font-size:10px;font-weight:800}
+.warmup-stage-heading h4{margin:0;font-size:11px;color:#25313d}
+.warmup-stage-heading small{display:block;font-size:9px;color:#9aa4af;margin-top:2px}
+.warmup-stage-list{display:grid;gap:0}
+.warmup-stage-item{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid #e8edf2}
+.warmup-stage-item span{font-size:10px;color:#364454;line-height:1.4}
+.warmup-stage-item b{font-size:9px;color:#8a6b37;white-space:nowrap;font-weight:700}
+.warmup-extra-note{margin-top:13px;border-radius:9px;background:#fff8ea;padding:11px 13px;color:#8c6e40;font-size:10px}
+@media(max-width:600px){.warmup-accordion>summary{padding:12px;gap:10px;min-height:74px}.warmup-badge{width:34px;height:34px;flex-basis:34px}.warmup-summary-text strong{font-size:11px}.warmup-summary-text>span{font-size:9px}.warmup-summary-action{font-size:0;gap:0}.warmup-summary-action i{font-size:18px}.warmup-accordion-body{padding:12px}.warmup-stages{grid-template-columns:1fr}.warmup-stage-item span{font-size:11px}}
