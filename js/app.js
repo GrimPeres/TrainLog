@@ -8,7 +8,7 @@ const HELP={
 };
 const helpLabel=(label,key=label)=>`<span class="help-label" tabindex="0">${label}<span class="help-icon">?</span><span class="help-tip">${HELP[key]||''}</span></span>`;
 for(let i=1;i<=PLAN.weeks;i++)week.add(new Option(`Semana ${i}`,i));
-let state={view:'dashboard',workout:1,week:1,session:null,exercise:0,libraryQuery:'',libraryGroup:'Todos',exerciseDetail:null};
+let state={view:'dashboard',workout:1,week:1,session:null,exercise:0,libraryQuery:'',libraryGroup:'Todos',exerciseDetail:null,progressExercise:''};
 const STORE='trainlog_sessions_v1',EX_META_STORE='trainlog_exercise_meta_v1',PLAN_STORE='trainlog_plan_v1';
 const DEFAULT_PLAN=JSON.parse(JSON.stringify(PLAN));
 const savedPlan=()=>{try{return JSON.parse(localStorage.getItem(PLAN_STORE))}catch(e){return null}};
@@ -78,6 +78,21 @@ function newWorkout(){let id=Date.now();PLAN.workouts.push({id,name:'Novo treino
 function deleteWorkout(wi){if(PLAN.workouts.length===1){alert('O plano tem de ter pelo menos um treino.');return}if(!confirm('Eliminar este treino do plano?'))return;let id=PLAN.workouts[wi].id;PLAN.workouts.splice(wi,1);if(state.workout===id)state.workout=PLAN.workouts[0].id;persistPlan();render()}
 function resetPlan(){if(!confirm('Repor o plano inicial? As alterações feitas ao plano serão perdidas.'))return;PLAN.name=DEFAULT_PLAN.name;PLAN.goal=DEFAULT_PLAN.goal;PLAN.weeks=DEFAULT_PLAN.weeks;PLAN.workouts=JSON.parse(JSON.stringify(DEFAULT_PLAN.workouts));persistPlan();state.workout=PLAN.workouts[0].id;render()}
 function libraryView(){let groups=['Todos',...new Set(EXERCISES.map(x=>x.group))],q=state.libraryQuery.toLowerCase(),items=EXERCISES.filter(x=>(state.libraryGroup==='Todos'||x.group===state.libraryGroup)&&x.name.toLowerCase().includes(q));return `<div class="wrap"><div class="sectionhead"><div><p class="eyebrow">EXERCÍCIOS</p><h2>Biblioteca de exercícios</h2><p>${EXERCISES.length} exercícios e variantes disponíveis.</p></div></div><div class="library-tools"><input id="librarySearch" placeholder="Pesquisar exercício…" value="${state.libraryQuery}" oninput="state.libraryQuery=this.value;render()"><div class="filter-chips">${groups.map(g=>`<button class="${g===state.libraryGroup?'active':''}" onclick="state.libraryGroup='${g}';render()">${g}</button>`).join('')}</div></div><div class="library-grid">${items.map(x=>`<article class="library-card clickable" onclick="openExercise('${x.id}')"><div class="muscle">${x.group}</div><h3>${x.name}</h3><small>Ver ficha →</small></article>`).join('')}</div>${!items.length?'<div class="card empty"><h3>Sem resultados</h3><p>Experimenta outro nome ou grupo muscular.</p></div>':''}</div>`}
+function progressView(){
+ const ss=sessions();
+ if(!ss.length)return `<div class="wrap"><div class="sectionhead"><div><p class="eyebrow">EVOLUÇÃO</p><h2>Progresso</h2><p>Os indicadores começam a aparecer depois do primeiro treino concluído.</p></div></div><div class="card empty"><div class="icon">↗</div><h3>Ainda sem dados de treino</h3><p>Conclui uma sessão para começar a acompanhar cargas, volume, séries e recordes.</p></div></div>`;
+ const records=[];
+ ss.forEach(s=>s.exercises?.forEach(e=>{const done=e.sets?.filter(x=>x.done)||[];if(done.length)records.push({session:s,name:e.name,sets:done})}));
+ const totalSets=records.reduce((n,r)=>n+r.sets.length,0);
+ const volume=records.reduce((n,r)=>n+r.sets.reduce((a,x)=>a+(parseFloat(x.load)||0)*(parseFloat(x.reps)||0),0),0);
+ const maxLoad=Math.max(0,...records.flatMap(r=>r.sets.map(x=>parseFloat(x.load)||0)));
+ const names=[...new Set(records.map(r=>r.name))].sort();
+ if(!state.progressExercise||!names.includes(state.progressExercise))state.progressExercise=names[0]||'';
+ const selected=records.filter(r=>r.name===state.progressExercise).reverse();
+ const points=selected.map(r=>{let best=r.sets.reduce((b,x)=>(parseFloat(x.load)||0)>(parseFloat(b.load)||0)?x:b,r.sets[0]);return {date:new Date(r.session.finishedAt||r.session.startedAt),load:parseFloat(best.load)||0,reps:parseFloat(best.reps)||0,rpe:best.rpe||'—',volume:r.sets.reduce((a,x)=>a+(parseFloat(x.load)||0)*(parseFloat(x.reps)||0),0)}});
+ const chartMax=Math.max(1,...points.map(x=>x.load));
+ return `<div class="wrap"><div class="sectionhead"><div><p class="eyebrow">EVOLUÇÃO</p><h2>Progresso</h2><p>Resumo calculado a partir dos treinos concluídos.</p></div></div><div class="progress-stats"><div class="stat"><small>SESSÕES</small><strong>${ss.length}</strong><em>concluídas</em></div><div class="stat"><small>SÉRIES</small><strong>${totalSets}</strong><em>registadas</em></div><div class="stat"><small>VOLUME TOTAL</small><strong>${Math.round(volume).toLocaleString('pt-PT')}</strong><em>kg · reps</em></div><div class="stat"><small>MAIOR CARGA</small><strong>${maxLoad||'—'}${maxLoad?' kg':''}</strong><em>numa série</em></div></div><div class="progress-grid"><div class="card progress-exercise"><div class="progress-card-head"><div><h3>Evolução por exercício</h3><p>Maior carga registada em cada sessão.</p></div><select onchange="state.progressExercise=this.value;render()">${names.map(n=>`<option ${n===state.progressExercise?'selected':''}>${n}</option>`).join('')}</select></div>${points.length?`<div class="mini-chart">${points.map((p,i)=>`<div class="chart-col" title="${p.date.toLocaleDateString('pt-PT')} · ${p.load} kg × ${p.reps}"><span style="height:${Math.max(6,p.load/chartMax*100)}%"></span><small>${p.load||'—'}</small></div>`).join('')}</div><div class="progress-table"><div class="progress-row head"><span>Data</span><span>Carga</span><span>Reps</span><span>RPE</span><span>Volume</span></div>${points.slice().reverse().map(p=>`<div class="progress-row"><span>${p.date.toLocaleDateString('pt-PT')}</span><b>${p.load||'—'} kg</b><span>${p.reps||'—'}</span><span>${p.rpe}</span><span>${Math.round(p.volume).toLocaleString('pt-PT')} kg</span></div>`).join('')}</div>`:''}</div><div class="card history-card"><h3>Histórico de sessões</h3><div class="history-list">${ss.map(s=>{let sets=s.exercises?.reduce((n,e)=>n+(e.sets?.filter(x=>x.done).length||0),0)||0;let vol=s.exercises?.reduce((n,e)=>n+(e.sets?.filter(x=>x.done).reduce((a,x)=>a+(parseFloat(x.load)||0)*(parseFloat(x.reps)||0),0)||0),0)||0;return `<div class="history-item"><div><b>${s.workoutName}</b><small>${new Date(s.finishedAt||s.startedAt).toLocaleDateString('pt-PT')} · Semana ${s.week}</small></div><div><strong>${sets}</strong><small>séries</small></div><div><strong>${Math.round(vol).toLocaleString('pt-PT')}</strong><small>volume</small></div></div>`}).join('')}</div></div></div></div>`
+}
 function placeholder(name,icon,text){return `<div class="wrap"><div class="sectionhead"><div><h2>${name}</h2><p>Área preparada para a próxima fase.</p></div></div><div class="card empty"><div class="icon">${icon}</div><h3>${name}</h3><p>${text}</p></div></div>`}
 function render(){
   week.value=state.week;
@@ -87,7 +102,7 @@ function render(){
     session:{title:'Treino em curso',view:sessionView},
     plan:{title:'Plano',view:planView},
     library:{title:'Biblioteca',view:libraryView},
-    progress:{title:'Progresso',view:()=>placeholder('Progresso','↗','Volume, cargas, recordes e estimativa de 1RM ao longo do tempo.')},
+    progress:{title:'Progresso',view:progressView},
     body:{title:'Corpo',view:()=>placeholder('Corpo','◇','Peso, passos, medidas corporais e evolução semanal.')},
     nutrition:{title:'Nutrição',view:()=>placeholder('Nutrição','◉','Macros, calorias, água e acompanhamento nutricional.')}
   };
