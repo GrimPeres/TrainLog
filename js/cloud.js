@@ -96,7 +96,17 @@ async function initializeCloud(){
    notify('Diferenças em: '+different.map(k=>CATEGORY_NAMES[k]||k).join(', ')+'. Compara as versões nas definições.');
    return;
   }
-  setBaseline();setCloudBaseline(rows);readyUser=user.id;saveCheckpoint();setAuto(true);
+  const remoteOnly=rows.filter(r=>Object.hasOwn(KEYS,r.category)&&!Object.hasOwn(local,r.category));
+  if(remoteOnly.length){
+   if(localStorage.getItem(KEYS.active_session)){notify('Existem dados na cloud para receber. Termina primeiro o treino em curso.');return}
+   localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
+   for(const row of remoteOnly)localStorage.setItem(KEYS[row.category],JSON.stringify(row.data));
+   setCloudBaseline(rows);setBaseline();readyUser=user.id;saveCheckpoint();setAuto(true);
+   location.reload();return;
+  }
+  setCloudBaseline(rows);
+  baseline=Object.fromEntries(Object.entries(local).filter(([k])=>Object.hasOwn(map,k)).map(([k,v])=>[k,serial(v)]));
+  readyUser=user.id;saveCheckpoint();setAuto(true);
   notify('Sincronização automática pronta.');
   scheduleAutoSync();
  }catch(e){readyUser=null;notify('Não foi possível iniciar a sincronização: '+(e.message||'erro'))}
