@@ -139,6 +139,6 @@ Storage.prototype.setItem=function(key,value){const result=originalSet.call(this
 window.addEventListener('online',scheduleAutoSync);
 window.addEventListener('focus',()=>{if(autoUser===getUser()?.id)scheduleAutoSync()});
 setBaseline();
-window.trainlogSync={open:openPanel,backup:downloadBackup};
+window.trainlogSync={open:openPanel,backup:downloadBackup,syncNow:()=>{if(autoUser===getUser()?.id)scheduleAutoSync()}};
 paint();
 })();
