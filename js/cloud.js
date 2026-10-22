@@ -46,17 +46,49 @@ async function automaticSync(){
    const remoteValue=row?serial(row.data):undefined;
    const localChanged=localValue!==baseline[category];
    const remoteChanged=remoteValue!==cloudBaseline[category];
-   // Uma sessão anulada é representada por null. A anulação prevalece
-   // sobre uma cópia antiga do mesmo treino noutro dispositivo.
-   if(category==='active_session'&&row&&isCleared(row.data)&&hasLocal&&!isCleared(local.active_session)&&clearedFor(row.data,local.active_session)&&!localChanged){
-    if(hasLocal&&localValue!==undefined)pull.push([key,NO_ACTIVE]);
+   if(category==='active_session'){
+    // Sessões têm identidade própria: uma anulação antiga não apaga um treino novo.
+    const lv=hasLocal?local[category]:undefined,rv=row?.data;
+    const lid=activeId(lv),rid=activeId(rv);
+    const localStarted=Date.parse(lv?.session?.startedAt||'')||0;
+    const remoteTime=Date.parse(row?.updated_at||'')||0;
+    if(localValue===remoteValue)continue;
+    if(lid&&isCleared(rv)){
+     if(rv?.sessionId!=null&&String(rv.sessionId)===String(lid)&&!localChanged){
+      pull.push([key,rv]);continue;
+     }
+     // A anulação genérica anterior só é aplicável a sessões anteriores.
+     if(rv?.sessionId==null&&remoteTime>=localStarted&&!localChanged){
+      pull.push([key,rv]);continue;
+     }
+     uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue;
+    }
+    if(isCleared(lv)&&rid){
+     if(lv?.sessionId!=null&&String(lv.sessionId)===String(rid)){
+      uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue;
+     }
+     if(remoteChanged&&!localChanged){pull.push([key,rv]);continue}
+     if(localChanged&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue}
+     conflicts.push(category);continue;
+    }
+    if(lid&&rid&&String(lid)===String(rid)){
+     if(localChanged&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue}
+     if(remoteChanged&&!localChanged){pull.push([key,rv]);continue}
+     if(!localChanged&&!remoteChanged)continue;
+     conflicts.push(category);continue;
+    }
+    if(lid&&rid&&String(lid)!==String(rid)){
+     if(localChanged&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue}
+     if(remoteChanged&&!localChanged){pull.push([key,rv]);continue}
+     conflicts.push(category);continue;
+    }
+    if(localChanged&&hasLocal&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue}
+    if(remoteChanged&&row&&!localChanged){pull.push([key,rv]);continue}
+    if(!row&&hasLocal){uploadRows.push({user_id:user.id,category,data:lv,updated_at:stamp()});continue}
+    if(row&&!hasLocal){pull.push([key,rv]);continue}
+    if(localChanged||remoteChanged)conflicts.push(category);
     continue;
    }
-   if(category==='active_session'&&hasLocal&&isCleared(local.active_session)&&row&&!isCleared(row.data)&&clearedFor(local.active_session,row.data)){
-    uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});
-    continue;
-   }
-   if(category==='active_session'&&hasLocal&&local.active_session?.session&&row&&isCleared(row.data)&&localChanged){uploadRows.push({user_id:user.id,category,data:local.active_session,updated_at:stamp()});continue}
    if(!localChanged&&!remoteChanged)continue;
    if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
    if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});continue}
@@ -131,7 +163,7 @@ async function initializeCloud(){
   const checkpoint=readCheckpoint(user);
   if(checkpoint){baseline=checkpoint.local;cloudBaseline=checkpoint.cloud;readyUser=user.id;setAuto(true);scheduleAutoSync();notify('A verificar alterações pendentes…');return}
   // Resolver uma sessão já anulada na cloud antes da comparação inicial.
-  if(Object.hasOwn(map,'active_session')&&isCleared(map.active_session)&&local.active_session?.session&&clearedFor(map.active_session,local.active_session)&&!readCheckpoint(user)){
+  if(Object.hasOwn(map,'active_session')&&isCleared(map.active_session)&&local.active_session?.session&&((map.active_session.sessionId!=null&&String(map.active_session.sessionId)===String(activeId(local.active_session)))||(map.active_session.sessionId==null&&(Date.parse(rows.find(r=>r.category==='active_session')?.updated_at||'')||0)>=(Date.parse(local.active_session.session.startedAt)||0)))&&!readCheckpoint(user)){
    localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
    local.active_session=NO_ACTIVE;
   }
