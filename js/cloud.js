@@ -5,7 +5,7 @@ const KEYS={
  plan:'trainlog_plan_v1',sessions:'trainlog_sessions_v1',schedule:'trainlog_schedule_v1',
  cardio:'trainlog_cardio_v1',body:'trainlog_body_v1',exercise_meta:'trainlog_exercise_meta_v1',
  weekly_goals:'trainlog_weekly_goals_v1',date_overrides:'trainlog_date_overrides_v1',
- active_session:'trainlog_active_session_v1',nutrition:'trainlog_nutrition_v1'
+ active_session:'trainlog_active_session_v1'
 };
 const status=document.getElementById('cloudStatus');
 const settingsToggle=document.getElementById('settingsToggle'),settingsMenu=document.getElementById('settingsMenu');
