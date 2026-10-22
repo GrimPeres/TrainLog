@@ -50,7 +50,7 @@ async function automaticSync(){
     if(hasLocal&&localValue!==undefined)pull.push([key,NO_ACTIVE]);
     continue;
    }
-   if(category==='active_session'&&isCleared(local.active_session)&&row&&!isCleared(row.data)){
+   if(category==='active_session'&&hasLocal&&isCleared(local.active_session)&&row&&!isCleared(row.data)){
     uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});
     continue;
    }
@@ -97,7 +97,7 @@ async function clearActiveEverywhere(){
  if(!confirm('Limpar o treino pendente desta conta na cloud e neste dispositivo? Não altera o histórico dos treinos concluídos.'))return;
  await run(async()=>{
   const user=getUser();
-  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:null,updated_at:stamp()},{onConflict:'user_id,category'});
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:NO_ACTIVE,updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
   localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
   const rows=await fetchRemote();
@@ -109,7 +109,7 @@ async function clearActiveEverywhere(){
 async function cancelActiveSession(){
  const user=getUser();if(!user||!getClient())return;
  try{
-  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:null,updated_at:stamp()},{onConflict:'user_id,category'});
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:NO_ACTIVE,updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
   const rows=await fetchRemote();
   cloudBaseline.active_session='null';baseline.active_session='null';saveCheckpoint();
