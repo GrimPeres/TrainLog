@@ -40,7 +40,7 @@ function enableAuto(){run(async()=>{
  const user=getUser(),rows=await fetchRemote();
  if(!confirm('Activar sincronização automática neste dispositivo? Primeiro confirma que os dados locais são a versão correcta. Se houver dados diferentes na cloud, recomenda-se restaurar ou rever antes.'))return;
  const current=localSnapshot(),conflicts=rows.filter(r=>Object.hasOwn(current,r.category)&&JSON.stringify(current[r.category])!==JSON.stringify(r.data));
- if(conflicts.length){notify('Existem '+conflicts.length+' categorias diferentes. Escolhe a versão a manter em «Comparar versões».');await compareVersions();return}
+ if(conflicts.length){notify('Existem '+conflicts.length+' categorias diferentes. Escolhe a versão a manter em «Comparar versões».');setTimeout(compareVersions,0);return}
  setBaseline();setCloudBaseline(rows);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
  setAuto(true);notify('Sincronização automática activada neste dispositivo.');scheduleAutoSync()
 })}
