@@ -8,7 +8,43 @@ const KEYS={
  active_session:'trainlog_active_session_v1'
 };
 const status=document.getElementById('cloudStatus');
-let busy=false,remote=null,remoteUser=null,lastMessage='';
+let busy=false,remote=null,remoteUser=null,lastMessage='',syncTimer=null,syncing=false;
+const AUTO_STORE='trainlog_auto_sync_v1';
+let autoUser=localStorage.getItem(AUTO_STORE)||'';
+let baseline={};
+const stamp=()=>new Date().toISOString();
+function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);paint();renderModal()}
+function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>JSON.stringify(v)!==baseline[k]).map(([k])=>k)}
+function setBaseline(){const s=localSnapshot();baseline=Object.fromEntries(Object.entries(s).map(([k,v])=>[k,JSON.stringify(v)]))}
+async function automaticSync(){
+ if(syncing||busy||!navigator.onLine||!getUser()||autoUser!==getUser().id)return;
+ syncing=true;
+ try{
+  const user=getUser(),changes=changedCategories();
+  if(!changes.length)return;
+  const rows=await fetchRemote();
+  const newer=changes.filter(k=>rows.some(r=>r.category===k&&new Date(r.updated_at).getTime()>(Number(sessionStorage.getItem('trainlog_last_cloud_sync')||0)+1500)));
+  if(newer.length){setAuto(false);notify('Conflito detectado. Sincronização automática pausada. Revê os dados na cloud.');return}
+  const snapshot=localSnapshot();
+  const payload=changes.map(category=>({user_id:user.id,category,data:snapshot[category],updated_at:stamp()}));
+  const {error}=await getClient().from('trainlog_user_data').upsert(payload,{onConflict:'user_id,category'});
+  if(error)throw error;
+  sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
+  setBaseline();notify('Sincronizado na cloud às '+new Date().toLocaleTimeString('pt-PT'));
+ }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
+ finally{syncing=false}
+}
+function scheduleAutoSync(){if(autoUser!==getUser()?.id)return;clearTimeout(syncTimer);syncTimer=setTimeout(automaticSync,1800)}
+function enableAuto(){run(async()=>{
+ const user=getUser(),rows=await fetchRemote();
+ if(!confirm('Activar sincronização automática neste dispositivo? Primeiro confirma que os dados locais são a versão correcta. Se houver dados diferentes na cloud, recomenda-se restaurar ou rever antes.'))return;
+ const current=localSnapshot(),conflicts=rows.filter(r=>Object.hasOwn(current,r.category)&&JSON.stringify(current[r.category])!==JSON.stringify(r.data));
+ if(conflicts.length){notify('Existem '+conflicts.length+' categorias diferentes na cloud. Resolve-as manualmente antes de activar a sincronização.');return}
+ setBaseline();sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
+ setAuto(true);notify('Sincronização automática activada neste dispositivo.');scheduleAutoSync()
+})}
+function disableAuto(){setAuto(false);notify('Sincronização automática desactivada.')}
+
 const getUser=()=>window.trainlogCloud?.getUser();
 const getClient=()=>window.trainlogCloud?.getClient();
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -18,7 +54,7 @@ function notify(message){lastMessage=message;paint()}
 function paint(){
  if(!status)return;
  const user=getUser();
- status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?'connected':'')+'"></span><span>'+(busy?'A processar…':user?'Conta ligada · dados locais':'Sem sessão na cloud')+'</span><button type="button" id="cloudOpen">Sincronização</button></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
+ status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?'connected':'')+'"></span><span>'+(busy?'A processar…':user?(autoUser===user.id?'Sincronização automática activa':'Conta ligada · sincronização manual'):'Sem sessão na cloud')+'</span><button type="button" id="cloudOpen">Sincronização</button></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
  status.querySelector('#cloudOpen').onclick=openPanel;
 }
 function downloadBackup(){
@@ -32,7 +68,7 @@ function downloadBackup(){
 function openPanel(){
  document.getElementById('cloudModal')?.remove();
  const modal=document.createElement('div');modal.id='cloudModal';modal.className='cloud-overlay';
- modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button></div><p class="cloud-warning">A sincronização ainda é manual. Antes de trocar de dispositivo, guarda os dados na cloud; no outro dispositivo, restaura-os. Não edites os dados simultaneamente em dois dispositivos. O restauro substitui os dados locais, após confirmação.</p></section>';
+ modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button></div><p class="cloud-warning">A sincronização automática é opcional e funciona neste dispositivo após activação. Se houver versões diferentes, é pausada para evitar substituições silenciosas. O restauro substitui os dados locais, após confirmação.</p></section>';
  document.body.appendChild(modal);
  modal.querySelector('#cloudClose').onclick=()=>modal.remove();
  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
@@ -40,6 +76,7 @@ function openPanel(){
  modal.querySelector('#cloudCheck').onclick=checkRemote;
  modal.querySelector('#cloudUpload').onclick=upload;
  modal.querySelector('#cloudRestore').onclick=restore;
+ modal.querySelector('#cloudAuto').onclick=()=>autoUser===getUser()?.id?disableAuto():enableAuto();
  renderModal();
 }
 function renderModal(message=''){
@@ -49,6 +86,7 @@ function renderModal(message=''){
  m.querySelector('#cloudMessage').textContent=message||lastMessage||'Os dados deste dispositivo não são enviados automaticamente.';
  for(const id of ['cloudCheck','cloudUpload','cloudRestore'])m.querySelector('#'+id).disabled=!user||busy;
  m.querySelector('#cloudBackup').disabled=busy;
+ const auto=m.querySelector('#cloudAuto');auto.disabled=!user||busy;auto.textContent=autoUser===user?.id?'Desactivar sincronização automática':'Activar sincronização automática';
 }
 async function run(action){
  if(busy)return;
@@ -77,7 +115,7 @@ async function upload(){await run(async()=>{
  const {error}=await getClient().from('trainlog_user_data').upsert(rows,{onConflict:'user_id,category'});
  if(error)throw error;
  await fetchRemote();
- notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
+ setBaseline();sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
 })}
 async function restore(){await run(async()=>{
  const user=getUser(),rows=await fetchRemote();
@@ -95,7 +133,12 @@ async function restore(){await run(async()=>{
  notify('Dados restaurados. A aplicação vai recarregar.');
  location.reload();
 })}
-window.addEventListener('trainlog-auth-change',()=>{remote=null;remoteUser=null;paint();renderModal()});
+window.addEventListener('trainlog-auth-change',()=>{remote=null;remoteUser=null;paint();renderModal();if(autoUser===getUser()?.id){setBaseline();sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()))}});
+const originalSet=Storage.prototype.setItem;
+Storage.prototype.setItem=function(key,value){const result=originalSet.call(this,key,value);if(this===localStorage&&Object.values(KEYS).includes(key))scheduleAutoSync();return result};
+window.addEventListener('online',scheduleAutoSync);
+window.addEventListener('focus',()=>{if(autoUser===getUser()?.id)scheduleAutoSync()});
+setBaseline();
 window.trainlogSync={open:openPanel,backup:downloadBackup};
 paint();
 })();
