@@ -69,7 +69,7 @@ function downloadBackup(){
 function openPanel(){
  document.getElementById('cloudModal')?.remove();
  const modal=document.createElement('div');modal.id='cloudModal';modal.className='cloud-overlay';
- modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização automática é opcional e funciona neste dispositivo após activação. Se houver versões diferentes, é pausada para evitar substituições silenciosas. O restauro substitui os dados locais, após confirmação.</p></section>';
+ modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização automática é opcional e funciona neste dispositivo após activação. Se houver versões diferentes, é pausada para evitar substituições silenciosas. O restauro substitui os dados locais, após confirmação.</p></section>';
  document.body.appendChild(modal);
  modal.querySelector('#cloudClose').onclick=()=>modal.remove();
  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
@@ -79,6 +79,7 @@ function openPanel(){
  modal.querySelector('#cloudRestore').onclick=restore;
  modal.querySelector('#cloudCompare').onclick=compareVersions;
  modal.querySelector('#cloudAuto').onclick=()=>autoUser===getUser()?.id?disableAuto():enableAuto();
+ modal.querySelector('#cloudReset').onclick=resetTestData;
  renderModal();
 }
 function renderModal(message=''){
@@ -88,6 +89,7 @@ function renderModal(message=''){
  m.querySelector('#cloudMessage').textContent=message||lastMessage||'Os dados deste dispositivo não são enviados automaticamente.';
  for(const id of ['cloudCheck','cloudUpload','cloudRestore','cloudCompare'])m.querySelector('#'+id).disabled=!user||busy;
  m.querySelector('#cloudBackup').disabled=busy;
+ m.querySelector('#cloudReset').disabled=busy;
  const auto=m.querySelector('#cloudAuto');auto.disabled=!user||busy;auto.textContent=autoUser===user?.id?'Desactivar sincronização automática':'Activar sincronização automática';
 }
 async function run(action){
@@ -158,6 +160,33 @@ async function upload(){await run(async()=>{
  await fetchRemote();
  setBaseline();setCloudBaseline(await fetchRemote());sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
 })}
+
+async function resetTestData(){
+ if(busy)return;
+ const user=getUser();
+ if(!user){notify('Inicia sessão para limpar também os dados da cloud.');renderModal();return}
+ const typed=prompt('Esta operação apaga definitivamente todos os registos de treino, planos, cardio, medições e metas desta conta na cloud e neste dispositivo. Para confirmar, escreve APAGAR:');
+ if(typed===null)return;
+ if(typed!=='APAGAR'){notify('Operação cancelada: confirmação incorrecta.');renderModal();return}
+ if(!confirm('Última confirmação: apagar os dados de teste deste dispositivo e desta conta Supabase? A conta de login será mantida.'))return;
+ busy=true;clearTimeout(syncTimer);syncing=true;paint();renderModal('A eliminar dados de teste…');
+ try{
+  // Eliminar primeiro da cloud. Se falhar, não alterar os dados locais.
+  const {error}=await getClient().from('trainlog_user_data').delete().eq('user_id',user.id);
+  if(error)throw error;
+  setAuto(false);
+  for(const key of Object.values(KEYS))localStorage.removeItem(key);
+  for(const key of ['trainlog_rest_timer_v1','trainlog_pre_restore_backup_v1'])localStorage.removeItem(key);
+  sessionStorage.removeItem('trainlog_last_cloud_sync');
+  baseline={};cloudBaseline={};
+  alert('Os dados de teste foram eliminados. A tua conta continua activa.');
+  location.reload();
+ }catch(e){
+  notify('Não foi possível concluir a limpeza: '+(e.message||'erro de ligação')+'. Os dados locais não foram apagados.');
+  busy=false;syncing=false;paint();renderModal();
+ }
+}
+
 async function restore(){await run(async()=>{
  const user=getUser(),rows=await fetchRemote();
  if(!rows.length){notify('Não existem dados na cloud para restaurar.');return}
