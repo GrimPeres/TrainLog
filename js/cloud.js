@@ -91,6 +91,16 @@ async function automaticSync(){
  }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
  finally{syncing=false}
 }
+async function cancelActiveSession(){
+ const user=getUser();if(!user||!getClient())return;
+ try{
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:null,updated_at:stamp()},{onConflict:'user_id,category'});
+  if(error)throw error;
+  const rows=await fetchRemote();
+  cloudBaseline.active_session='null';baseline.active_session='null';saveCheckpoint();
+  notify('Treino descartado e anulação confirmada na cloud.');
+ }catch(e){notify('Treino descartado localmente. Anulação na cloud pendente: '+(e.message||'sem ligação'));scheduleAutoSync()}
+}
 function scheduleAutoSync(){if(autoUser!==getUser()?.id||readyUser!==getUser()?.id)return;clearTimeout(syncTimer);syncTimer=setTimeout(automaticSync,1800)}
 
 async function initializeCloud(){
@@ -306,6 +316,6 @@ window.addEventListener('focus',()=>{if(autoUser===getUser()?.id)scheduleAutoSyn
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleAutoSync()});
 setBaseline();
 if(getUser())initializeCloud();
-window.trainlogSync={open:openPanel,backup:downloadBackup,syncNow:()=>{if(autoUser===getUser()?.id)scheduleAutoSync()}};
+window.trainlogSync={open:openPanel,backup:downloadBackup,cancelActiveSession,syncNow:()=>{if(autoUser===getUser()?.id)scheduleAutoSync()}};
 paint();
 })();
