@@ -46,7 +46,7 @@ async function automaticSync(){
    const remoteChanged=remoteValue!==cloudBaseline[category];
    // Uma sessão anulada é representada por null. A anulação prevalece
    // sobre uma cópia antiga do mesmo treino noutro dispositivo.
-   if(category==='active_session'&&row&&isCleared(row.data)&&!isCleared(local.active_session)){
+   if(category==='active_session'&&row&&isCleared(row.data)&&hasLocal&&!isCleared(local.active_session)){
     if(hasLocal&&localValue!==undefined)pull.push([key,NO_ACTIVE]);
     continue;
    }
@@ -97,7 +97,7 @@ async function clearActiveEverywhere(){
  if(!confirm('Limpar o treino pendente desta conta na cloud e neste dispositivo? Não altera o histórico dos treinos concluídos.'))return;
  await run(async()=>{
   const user=getUser();
-  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:NO_ACTIVE,updated_at:stamp()},{onConflict:'user_id,category'});
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:{status:'cleared'},updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
   localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
   const rows=await fetchRemote();
@@ -112,7 +112,7 @@ async function cancelActiveSession(){
   const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:NO_ACTIVE,updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
   const rows=await fetchRemote();
-  cloudBaseline.active_session='null';baseline.active_session='null';saveCheckpoint();
+  cloudBaseline.active_session=serial(NO_ACTIVE);baseline.active_session=serial(NO_ACTIVE);saveCheckpoint();
   notify('Treino descartado e anulação confirmada na cloud.');
  }catch(e){notify('Treino descartado localmente. Anulação na cloud pendente: '+(e.message||'sem ligação'));scheduleAutoSync()}
 }
