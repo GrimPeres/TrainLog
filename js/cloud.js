@@ -11,7 +11,7 @@ const status=document.getElementById('cloudStatus');
 let busy=false,remote=null,remoteUser=null,lastMessage='',syncTimer=null,syncing=false;
 const AUTO_STORE='trainlog_auto_sync_v1';
 let autoUser=localStorage.getItem(AUTO_STORE)||'';
-let baseline={},cloudBaseline={},pollTimer=null;
+let baseline={},cloudBaseline={},pollTimer=null,readyUser=null,initializing=false;
 const stamp=()=>new Date().toISOString();
 function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);if(pollTimer)clearInterval(pollTimer);pollTimer=autoUser?setInterval(automaticSync,30000):null;paint();renderModal()}
 function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>JSON.stringify(v)!==baseline[k]).map(([k])=>k)}
@@ -19,7 +19,7 @@ function setBaseline(){const s=localSnapshot();baseline=Object.fromEntries(Objec
 function setCloudBaseline(rows){cloudBaseline=Object.fromEntries(rows.map(r=>[r.category,JSON.stringify(r.data)]))}
 function same(a,b){return JSON.stringify(a)===JSON.stringify(b)}
 async function automaticSync(){
- if(syncing||busy||!navigator.onLine||!getUser()||autoUser!==getUser().id)return;
+ if(syncing||busy||!navigator.onLine||!getUser()||autoUser!==getUser().id||readyUser!==getUser().id)return;
  syncing=true;
  try{
   const user=getUser(),rows=await fetchRemote(),local=localSnapshot(),remoteMap=Object.fromEntries(rows.map(r=>[r.category,r]));
@@ -67,7 +67,27 @@ async function automaticSync(){
  }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
  finally{syncing=false}
 }
-function scheduleAutoSync(){if(autoUser!==getUser()?.id)return;clearTimeout(syncTimer);syncTimer=setTimeout(automaticSync,1800)}
+function scheduleAutoSync(){if(autoUser!==getUser()?.id||readyUser!==getUser()?.id)return;clearTimeout(syncTimer);syncTimer=setTimeout(automaticSync,1800)}
+
+async function initializeCloud(){
+ const user=getUser();
+ if(!user){readyUser=null;setAuto(false);return}
+ if(readyUser===user.id||initializing)return;
+ initializing=true;
+ try{
+  const rows=await fetchRemote(),local=localSnapshot(),map=Object.fromEntries(rows.map(r=>[r.category,r.data]));
+  const different=Object.keys(local).filter(k=>Object.hasOwn(map,k)&&!same(local[k],map[k]));
+  if(different.length){
+   readyUser=null;setAuto(false);
+   notify('Há '+different.length+' categorias com versões diferentes. Abre «Sincronização → Comparar versões» para escolher quais manter.');
+   return;
+  }
+  setBaseline();setCloudBaseline(rows);readyUser=user.id;setAuto(true);
+  notify('Sincronização automática pronta.');
+  scheduleAutoSync();
+ }catch(e){readyUser=null;notify('Não foi possível iniciar a sincronização: '+(e.message||'erro'))}
+ finally{initializing=false}
+}
 function enableAuto(){run(async()=>{
  const user=getUser(),rows=await fetchRemote();
  if(!confirm('Activar sincronização automática neste dispositivo? Primeiro confirma que os dados locais são a versão correcta. Se houver dados diferentes na cloud, recomenda-se restaurar ou rever antes.'))return;
@@ -87,7 +107,7 @@ function notify(message){lastMessage=message;paint()}
 function paint(){
  if(!status)return;
  const user=getUser();
- status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?'connected':'')+'"></span><span>'+(busy?'A processar…':user?(autoUser===user.id?'Sincronização automática activa':'Conta ligada · sincronização manual'):'Sem sessão na cloud')+'</span><button type="button" id="cloudOpen">Sincronização</button></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
+ status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?'connected':'')+'"></span><span>'+(busy?'A processar…':user?(readyUser===user.id?'Sincronização automática activa':'Conta ligada · a verificar dados'):'Sem sessão na cloud')+'</span><button type="button" id="cloudOpen">Sincronização</button></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
  status.querySelector('#cloudOpen').onclick=openPanel;
 }
 function downloadBackup(){
@@ -101,7 +121,7 @@ function downloadBackup(){
 function openPanel(){
  document.getElementById('cloudModal')?.remove();
  const modal=document.createElement('div');modal.id='cloudModal';modal.className='cloud-overlay';
- modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização automática verifica alterações nos dois sentidos, incluindo ao regressar à aplicação. Diferenças simultâneas pausam a sincronização. O restauro manual substitui os dados locais após confirmação.</p></section>';
+ modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização funciona automaticamente após iniciares sessão. Se já existirem versões diferentes, é necessária uma escolha manual para evitar perda de dados. O restauro manual substitui os dados locais após confirmação.</p></section>';
  document.body.appendChild(modal);
  modal.querySelector('#cloudClose').onclick=()=>modal.remove();
  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
@@ -178,6 +198,7 @@ async function resolveCategory(category,choice){
   setBaseline();setCloudBaseline(await fetchRemote());notify('Categoria «'+name+'» actualizada.'); 
  });
  await compareVersions();
+ if(getUser())initializeCloud();
 }
 
 async function upload(){await run(async()=>{
@@ -190,7 +211,7 @@ async function upload(){await run(async()=>{
  const {error}=await getClient().from('trainlog_user_data').upsert(rows,{onConflict:'user_id,category'});
  if(error)throw error;
  await fetchRemote();
- setBaseline();setCloudBaseline(await fetchRemote());sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
+ setBaseline();setCloudBaseline(await fetchRemote());readyUser=user.id;setAuto(true);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
 })}
 
 async function resetTestData(){
@@ -235,13 +256,14 @@ async function restore(){await run(async()=>{
  notify('Dados restaurados. A aplicação vai recarregar.');
  location.reload();
 })}
-window.addEventListener('trainlog-auth-change',()=>{remote=null;remoteUser=null;paint();renderModal();if(autoUser===getUser()?.id){setAuto(false);notify('Por segurança, reactiva a sincronização após iniciar sessão.')}});
+window.addEventListener('trainlog-auth-change',()=>{paint();renderModal();if(!getUser()){readyUser=null;setAuto(false);return}if(readyUser!==getUser().id)initializeCloud()});
 const originalSet=Storage.prototype.setItem;
 Storage.prototype.setItem=function(key,value){const result=originalSet.call(this,key,value);if(this===localStorage&&Object.values(KEYS).includes(key))scheduleAutoSync();return result};
 window.addEventListener('online',scheduleAutoSync);
 window.addEventListener('focus',()=>{if(autoUser===getUser()?.id)scheduleAutoSync()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleAutoSync()});
 setBaseline();
+if(getUser())initializeCloud();
 window.trainlogSync={open:openPanel,backup:downloadBackup,syncNow:()=>{if(autoUser===getUser()?.id)scheduleAutoSync()}};
 paint();
 })();
