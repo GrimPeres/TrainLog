@@ -5,6 +5,7 @@ const URL='https://iujzypncfytvcejwzhii.supabase.co';
 const KEY='sb_publishable_XkkyUBgIdvH_x3Hw1zRv2g_twsDhcVv';
 const root=document.getElementById('authRoot');
 let client=null,user=null,mode='login',busy=false,feedback='',feedbackOk=false;
+window.trainlogCloud={getClient:()=>client,getUser:()=>user};
 const escText=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button=document.getElementById('accountButton');
 function passwordField(name,label,autocomplete){
@@ -68,13 +69,13 @@ async function init(){
  if(!window.supabase?.createClient){mode='login';feedback='Não foi possível carregar a ligação ao Supabase. Verifica a Internet e actualiza a página.';show();return}
  client=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
  client.auth.onAuthStateChange((event,session)=>{
-  user=session?.user||null;updateButton();
+  user=session?.user||null;updateButton();window.dispatchEvent(new CustomEvent('trainlog-auth-change',{detail:{userId:user?.id||null}}));
   if(event==='PASSWORD_RECOVERY'){mode='newpassword';feedback='';show()}
   if(event==='SIGNED_OUT'&&root.hidden){mode='login';show()}
  });
  const {data,error}=await client.auth.getSession();
  if(error){feedback=errorMessage(error);mode='login';show();return}
- user=data.session?.user||null;updateButton();
+ user=data.session?.user||null;updateButton();window.dispatchEvent(new CustomEvent('trainlog-auth-change',{detail:{userId:user?.id||null}}));
  if(!user){mode='login';show()}
 }
 init();
