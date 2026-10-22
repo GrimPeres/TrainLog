@@ -91,6 +91,19 @@ async function automaticSync(){
  }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
  finally{syncing=false}
 }
+async function clearActiveEverywhere(){
+ if(!confirm('Limpar o treino pendente desta conta na cloud e neste dispositivo? Não altera o histórico dos treinos concluídos.'))return;
+ await run(async()=>{
+  const user=getUser();
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:null,updated_at:stamp()},{onConflict:'user_id,category'});
+  if(error)throw error;
+  localStorage.setItem(KEYS.active_session,'null');
+  const rows=await fetchRemote();
+  cloudBaseline.active_session='null';baseline.active_session='null';readyUser=user.id;saveCheckpoint();setAuto(true);
+  notify('Treino pendente removido da cloud. Actualiza o outro dispositivo.');
+  location.reload();
+ })
+}
 async function cancelActiveSession(){
  const user=getUser();if(!user||!getClient())return;
  try{
@@ -172,7 +185,7 @@ function downloadBackup(){
 function openPanel(){
  document.getElementById('cloudModal')?.remove();
  const modal=document.createElement('div');modal.id='cloudModal';modal.className='cloud-overlay';
- modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização funciona automaticamente após iniciares sessão. Se já existirem versões diferentes, é necessária uma escolha manual para evitar perda de dados. O restauro manual substitui os dados locais após confirmação.</p></section>';
+ modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudClearActive" class="cloud-danger">Limpar treino pendente em todos os dispositivos</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização funciona automaticamente após iniciares sessão. Se já existirem versões diferentes, é necessária uma escolha manual para evitar perda de dados. O restauro manual substitui os dados locais após confirmação.</p></section>';
  document.body.appendChild(modal);
  modal.querySelector('#cloudClose').onclick=()=>modal.remove();
  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
@@ -183,6 +196,7 @@ function openPanel(){
  modal.querySelector('#cloudCompare').onclick=compareVersions;
  modal.querySelector('#cloudAuto').onclick=()=>autoUser===getUser()?.id?disableAuto():enableAuto();
  modal.querySelector('#cloudReset').onclick=resetTestData;
+ modal.querySelector('#cloudClearActive').onclick=clearActiveEverywhere;
  renderModal();
 }
 function renderModal(message=''){
@@ -193,6 +207,7 @@ function renderModal(message=''){
  for(const id of ['cloudCheck','cloudUpload','cloudRestore','cloudCompare'])m.querySelector('#'+id).disabled=!user||busy;
  m.querySelector('#cloudBackup').disabled=busy;
  m.querySelector('#cloudReset').disabled=busy;
+ m.querySelector('#cloudClearActive').disabled=!user||busy;
  const auto=m.querySelector('#cloudAuto');auto.disabled=!user||busy;auto.textContent=autoUser===user?.id?'Desactivar sincronização automática':'Activar sincronização automática';
 }
 async function run(action){
