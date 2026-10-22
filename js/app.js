@@ -302,7 +302,7 @@ function render(){
     progress:{title:'Progresso',view:progressView},
     body:{title:'Corpo',view:bodyView},
     cardio:{title:'Cardio',view:cardioView},
-    nutrition:{title:'Nutrição',view:()=>placeholder('Nutrição','◉','Macros, calorias, água e acompanhamento nutricional.')}
+    nutrition:{title:'Nutrição',view:nutritionView}
   };
   const current=views[state.view]||views.dashboard;
   title.textContent=current.title;
