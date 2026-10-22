@@ -20,6 +20,8 @@ const AUTO_STORE='trainlog_auto_sync_v1';
 let autoUser=localStorage.getItem(AUTO_STORE)||'';
 let baseline={},cloudBaseline={},pollTimer=null,readyUser=null,initializing=false;
 const BASE_STORE='trainlog_sync_baseline_v2';
+const NO_ACTIVE={status:'cleared'};
+function isCleared(v){return v===null||v?.status==='cleared'}
 function saveCheckpoint(){const user=getUser();if(user&&readyUser===user.id)localStorage.setItem(BASE_STORE+':'+user.id,JSON.stringify({local:baseline,cloud:cloudBaseline}))}
 function readCheckpoint(user){try{const x=JSON.parse(localStorage.getItem(BASE_STORE+':'+user.id)||'null');return x&&x.local&&x.cloud?x:null}catch{return null}}
 const stamp=()=>new Date().toISOString();
@@ -44,17 +46,17 @@ async function automaticSync(){
    const remoteChanged=remoteValue!==cloudBaseline[category];
    // Uma sessão anulada é representada por null. A anulação prevalece
    // sobre uma cópia antiga do mesmo treino noutro dispositivo.
-   if(category==='active_session'&&row&&remoteValue==='null'&&localValue!=='null'){
-    if(hasLocal&&localValue!==undefined)pull.push([key,null]);
+   if(category==='active_session'&&row&&isCleared(row.data)&&!isCleared(local.active_session)){
+    if(hasLocal&&localValue!==undefined)pull.push([key,NO_ACTIVE]);
     continue;
    }
-   if(category==='active_session'&&localValue==='null'&&row&&remoteValue!=='null'){
-    uploadRows.push({user_id:user.id,category,data:null,updated_at:stamp()});
+   if(category==='active_session'&&isCleared(local.active_session)&&row&&!isCleared(row.data)){
+    uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});
     continue;
    }
    if(!localChanged&&!remoteChanged)continue;
    if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
-   if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:null,updated_at:stamp()});continue}
+   if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});continue}
    if(localChanged&&hasLocal&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:local[category],updated_at:stamp()});continue}
    if(remoteChanged&&row&&!localChanged){pull.push([key,row.data]);continue}
    if(localValue===remoteValue)continue;
@@ -97,9 +99,9 @@ async function clearActiveEverywhere(){
   const user=getUser();
   const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:null,updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
-  localStorage.setItem(KEYS.active_session,'null');
+  localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
   const rows=await fetchRemote();
-  cloudBaseline.active_session='null';baseline.active_session='null';readyUser=user.id;saveCheckpoint();setAuto(true);
+  cloudBaseline.active_session=serial(NO_ACTIVE);baseline.active_session=serial(NO_ACTIVE);readyUser=user.id;saveCheckpoint();setAuto(true);
   notify('Treino pendente removido da cloud. Actualiza o outro dispositivo.');
   location.reload();
  })
@@ -126,9 +128,9 @@ async function initializeCloud(){
   const checkpoint=readCheckpoint(user);
   if(checkpoint){baseline=checkpoint.local;cloudBaseline=checkpoint.cloud;readyUser=user.id;setAuto(true);scheduleAutoSync();notify('A verificar alterações pendentes…');return}
   // Resolver uma sessão já anulada na cloud antes da comparação inicial.
-  if(Object.hasOwn(map,'active_session')&&map.active_session===null&&local.active_session?.session){
-   localStorage.setItem(KEYS.active_session,'null');
-   local.active_session=null;
+  if(Object.hasOwn(map,'active_session')&&isCleared(map.active_session)&&local.active_session?.session){
+   localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
+   local.active_session=NO_ACTIVE;
   }
   const different=Object.keys(local).filter(k=>Object.hasOwn(map,k)&&!same(local[k],map[k]));
   if(different.length){
