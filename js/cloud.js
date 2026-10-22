@@ -5,7 +5,7 @@ const KEYS={
  plan:'trainlog_plan_v1',sessions:'trainlog_sessions_v1',schedule:'trainlog_schedule_v1',
  cardio:'trainlog_cardio_v1',body:'trainlog_body_v1',exercise_meta:'trainlog_exercise_meta_v1',
  weekly_goals:'trainlog_weekly_goals_v1',date_overrides:'trainlog_date_overrides_v1',
- active_session:'trainlog_active_session_v1'
+ active_session:'trainlog_active_session_v1',nutrition:'trainlog_nutrition_v1'
 };
 const status=document.getElementById('cloudStatus');
 const settingsToggle=document.getElementById('settingsToggle'),settingsMenu=document.getElementById('settingsMenu');
@@ -267,7 +267,7 @@ async function checkRemote(){await run(async()=>{
  notify(rows.length?'Cloud: '+rows.length+' categorias guardadas. Última actualização: '+new Date(Math.max(...rows.map(x=>new Date(x.updated_at).getTime()))).toLocaleString('pt-PT'):'Ainda não existem dados guardados nesta conta.');
 })}
 
-const CATEGORY_NAMES={plan:'Plano de treino',sessions:'Treinos concluídos',schedule:'Semana-base',cardio:'Cardio',body:'Medições corporais',exercise_meta:'Notas e vídeos',weekly_goals:'Metas semanais',date_overrides:'Excepções do calendário',active_session:'Treino em curso'};
+const CATEGORY_NAMES={plan:'Plano de treino',sessions:'Treinos concluídos',schedule:'Semana-base',cardio:'Cardio',body:'Medições corporais',exercise_meta:'Notas e vídeos',weekly_goals:'Metas semanais',date_overrides:'Excepções do calendário',active_session:'Treino em curso',nutrition:'Nutrição'};
 async function compareVersions(){
  await run(async()=>{
   const rows=await fetchRemote(),local=localSnapshot(),container=document.getElementById('cloudDifferences');
