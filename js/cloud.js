@@ -42,6 +42,16 @@ async function automaticSync(){
    const remoteValue=row?serial(row.data):undefined;
    const localChanged=localValue!==baseline[category];
    const remoteChanged=remoteValue!==cloudBaseline[category];
+   // Uma sessão anulada é representada por null. A anulação prevalece
+   // sobre uma cópia antiga do mesmo treino noutro dispositivo.
+   if(category==='active_session'&&row&&remoteValue==='null'&&localValue!=='null'){
+    if(hasLocal&&localValue!==undefined)pull.push([key,null]);
+    continue;
+   }
+   if(category==='active_session'&&localValue==='null'&&row&&remoteValue!=='null'){
+    uploadRows.push({user_id:user.id,category,data:null,updated_at:stamp()});
+    continue;
+   }
    if(!localChanged&&!remoteChanged)continue;
    if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
    if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:null,updated_at:stamp()});continue}
@@ -59,7 +69,7 @@ async function automaticSync(){
   // Antes de gravar, confirmar que a cloud não mudou entretanto.
   if(uploadRows.length){
    const latest=await fetchRemote(),latestMap=Object.fromEntries(latest.map(r=>[r.category,r]));
-   if(uploadRows.some(r=>serial(latestMap[r.category]?.data)!==cloudBaseline[r.category])){
+   if(uploadRows.some(r=>r.category!=='active_session'&&serial(latestMap[r.category]?.data)!==cloudBaseline[r.category])){
     setAuto(false);notify('A cloud mudou durante a gravação. Revê as versões antes de continuar.');return;
    }
    const {error}=await getClient().from('trainlog_user_data').upsert(uploadRows,{onConflict:'user_id,category'});
@@ -92,6 +102,11 @@ async function initializeCloud(){
   const rows=await fetchRemote(),local=localSnapshot(),map=Object.fromEntries(rows.map(r=>[r.category,r.data]));
   const checkpoint=readCheckpoint(user);
   if(checkpoint){baseline=checkpoint.local;cloudBaseline=checkpoint.cloud;readyUser=user.id;setAuto(true);scheduleAutoSync();notify('A verificar alterações pendentes…');return}
+  // Resolver uma sessão já anulada na cloud antes da comparação inicial.
+  if(Object.hasOwn(map,'active_session')&&map.active_session===null&&local.active_session?.session){
+   localStorage.setItem(KEYS.active_session,'null');
+   local.active_session=null;
+  }
   const different=Object.keys(local).filter(k=>Object.hasOwn(map,k)&&!same(local[k],map[k]));
   if(different.length){
    readyUser=null;setAuto(false);
