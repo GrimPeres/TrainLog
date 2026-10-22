@@ -54,7 +54,7 @@ async function automaticSync(){
   }
   if(pull.length){
    // Só importar quando não houver treino em curso nem alterações locais pendentes.
-   if(window.trainlogSessionActive?.()){
+   if(localStorage.getItem(KEYS.active_session)){
     notify('Actualização disponível na cloud. Termina o treino antes de a receber.');return;
    }
    localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
