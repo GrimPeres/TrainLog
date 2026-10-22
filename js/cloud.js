@@ -66,7 +66,8 @@ async function automaticSync(){
   }
   if(pull.length){
    // Só importar quando não houver treino em curso nem alterações locais pendentes.
-   if(localStorage.getItem(KEYS.active_session)){
+   const currentActive=localSnapshot().active_session;
+   if(currentActive?.session&&pull.some(([key,value])=>key!==KEYS.active_session||value?.session)){
     notify('Actualização disponível na cloud. Termina o treino antes de a receber.');return;
    }
    localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
@@ -98,7 +99,7 @@ async function initializeCloud(){
   }
   const remoteOnly=rows.filter(r=>Object.hasOwn(KEYS,r.category)&&!Object.hasOwn(local,r.category));
   if(remoteOnly.length){
-   if(localStorage.getItem(KEYS.active_session)){notify('Existem dados na cloud para receber. Termina primeiro o treino em curso.');return}
+   if(localSnapshot().active_session?.session){notify('Existem dados na cloud para receber. Termina primeiro o treino em curso.');return}
    localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
    for(const row of remoteOnly)localStorage.setItem(KEYS[row.category],JSON.stringify(row.data));
    setCloudBaseline(rows);setBaseline();readyUser=user.id;saveCheckpoint();setAuto(true);
