@@ -19,6 +19,9 @@ let busy=false,remote=null,remoteUser=null,lastMessage='',syncTimer=null,syncing
 const AUTO_STORE='trainlog_auto_sync_v1';
 let autoUser=localStorage.getItem(AUTO_STORE)||'';
 let baseline={},cloudBaseline={},pollTimer=null,readyUser=null,initializing=false;
+const BASE_STORE='trainlog_sync_baseline_v2';
+function saveCheckpoint(){const user=getUser();if(user&&readyUser===user.id)localStorage.setItem(BASE_STORE+':'+user.id,JSON.stringify({local:baseline,cloud:cloudBaseline}))}
+function readCheckpoint(user){try{const x=JSON.parse(localStorage.getItem(BASE_STORE+':'+user.id)||'null');return x&&x.local&&x.cloud?x:null}catch{return null}}
 const stamp=()=>new Date().toISOString();
 function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);if(pollTimer)clearInterval(pollTimer);pollTimer=autoUser?setInterval(automaticSync,30000):null;paint();renderModal()}
 function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>serial(v)!==baseline[k]).map(([k])=>k)}
@@ -70,7 +73,7 @@ async function automaticSync(){
    for(const [key,value] of pull)localStorage.setItem(key,JSON.stringify(value));
   }
   const finalRows=await fetchRemote();
-  setCloudBaseline(finalRows);setBaseline();
+  setCloudBaseline(finalRows);setBaseline();saveCheckpoint();
   if(pull.length){notify('Dados recebidos da cloud. A actualizar a aplicação…');location.reload();return}
   if(uploadRows.length)notify('Sincronizado na cloud às '+new Date().toLocaleTimeString('pt-PT'));
  }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
@@ -85,13 +88,15 @@ async function initializeCloud(){
  initializing=true;
  try{
   const rows=await fetchRemote(),local=localSnapshot(),map=Object.fromEntries(rows.map(r=>[r.category,r.data]));
+  const checkpoint=readCheckpoint(user);
+  if(checkpoint){baseline=checkpoint.local;cloudBaseline=checkpoint.cloud;readyUser=user.id;setAuto(true);scheduleAutoSync();notify('A verificar alterações pendentes…');return}
   const different=Object.keys(local).filter(k=>Object.hasOwn(map,k)&&!same(local[k],map[k]));
   if(different.length){
    readyUser=null;setAuto(false);
    notify('Diferenças em: '+different.map(k=>CATEGORY_NAMES[k]||k).join(', ')+'. Compara as versões nas definições.');
    return;
   }
-  setBaseline();setCloudBaseline(rows);readyUser=user.id;setAuto(true);
+  setBaseline();setCloudBaseline(rows);readyUser=user.id;saveCheckpoint();setAuto(true);
   notify('Sincronização automática pronta.');
   scheduleAutoSync();
  }catch(e){readyUser=null;notify('Não foi possível iniciar a sincronização: '+(e.message||'erro'))}
@@ -102,7 +107,7 @@ function enableAuto(){run(async()=>{
  if(!confirm('Activar sincronização automática neste dispositivo? Primeiro confirma que os dados locais são a versão correcta. Se houver dados diferentes na cloud, recomenda-se restaurar ou rever antes.'))return;
  const current=localSnapshot(),conflicts=rows.filter(r=>Object.hasOwn(current,r.category)&&serial(current[r.category])!==serial(r.data));
  if(conflicts.length){notify('Existem '+conflicts.length+' categorias diferentes. Escolhe a versão a manter em «Comparar versões».');setTimeout(compareVersions,0);return}
- setBaseline();setCloudBaseline(rows);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
+ setBaseline();setCloudBaseline(rows);readyUser=user.id;saveCheckpoint();sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
  setAuto(true);notify('Sincronização automática activada neste dispositivo.');scheduleAutoSync()
 })}
 function disableAuto(){setAuto(false);notify('Sincronização automática desactivada.')}
@@ -204,7 +209,7 @@ async function resolveCategory(category,choice){
    localStorage.setItem(KEYS[category],serial(row.data));
    location.reload();return;
   }
-  setBaseline();setCloudBaseline(await fetchRemote());notify('Categoria «'+name+'» actualizada.'); 
+  setBaseline();setCloudBaseline(await fetchRemote());if(readyUser===getUser()?.id)saveCheckpoint();notify('Categoria «'+name+'» actualizada.'); 
  });
  await compareVersions();
  if(getUser())initializeCloud();
@@ -220,7 +225,7 @@ async function upload(){await run(async()=>{
  const {error}=await getClient().from('trainlog_user_data').upsert(rows,{onConflict:'user_id,category'});
  if(error)throw error;
  await fetchRemote();
- setBaseline();setCloudBaseline(await fetchRemote());readyUser=user.id;setAuto(true);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
+ setBaseline();setCloudBaseline(await fetchRemote());readyUser=user.id;saveCheckpoint();setAuto(true);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));notify('Dados guardados na cloud ('+categories.length+' categorias). Os dados locais foram mantidos.');
 })}
 
 async function resetTestData(){
@@ -237,6 +242,7 @@ async function resetTestData(){
   const {error}=await getClient().from('trainlog_user_data').delete().eq('user_id',user.id);
   if(error)throw error;
   setAuto(false);
+  localStorage.removeItem(BASE_STORE+':'+user.id);
   for(const key of Object.values(KEYS))localStorage.removeItem(key);
   for(const key of ['trainlog_rest_timer_v1','trainlog_pre_restore_backup_v1'])localStorage.removeItem(key);
   sessionStorage.removeItem('trainlog_last_cloud_sync');
