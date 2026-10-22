@@ -44,6 +44,7 @@ async function automaticSync(){
    const remoteChanged=remoteValue!==cloudBaseline[category];
    if(!localChanged&&!remoteChanged)continue;
    if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
+   if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:null,updated_at:stamp()});continue}
    if(localChanged&&hasLocal&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:local[category],updated_at:stamp()});continue}
    if(remoteChanged&&row&&!localChanged){pull.push([key,row.data]);continue}
    if(localValue===remoteValue)continue;
