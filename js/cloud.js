@@ -11,27 +11,59 @@ const status=document.getElementById('cloudStatus');
 let busy=false,remote=null,remoteUser=null,lastMessage='',syncTimer=null,syncing=false;
 const AUTO_STORE='trainlog_auto_sync_v1';
 let autoUser=localStorage.getItem(AUTO_STORE)||'';
-let baseline={},cloudBaseline={};
+let baseline={},cloudBaseline={},pollTimer=null;
 const stamp=()=>new Date().toISOString();
-function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);paint();renderModal()}
+function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);if(pollTimer)clearInterval(pollTimer);pollTimer=autoUser?setInterval(automaticSync,30000):null;paint();renderModal()}
 function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>JSON.stringify(v)!==baseline[k]).map(([k])=>k)}
 function setBaseline(){const s=localSnapshot();baseline=Object.fromEntries(Object.entries(s).map(([k,v])=>[k,JSON.stringify(v)]))}
 function setCloudBaseline(rows){cloudBaseline=Object.fromEntries(rows.map(r=>[r.category,JSON.stringify(r.data)]))}
+function same(a,b){return JSON.stringify(a)===JSON.stringify(b)}
 async function automaticSync(){
  if(syncing||busy||!navigator.onLine||!getUser()||autoUser!==getUser().id)return;
  syncing=true;
  try{
-  const user=getUser(),changes=changedCategories();
-  if(!changes.length)return;
-  const rows=await fetchRemote();
-  const newer=changes.filter(k=>{const row=rows.find(r=>r.category===k);return row&&JSON.stringify(row.data)!==cloudBaseline[k]});
-  if(newer.length){setAuto(false);notify('Conflito detectado. Sincronização automática pausada. Revê os dados na cloud.');return}
-  const snapshot=localSnapshot();
-  const payload=changes.map(category=>({user_id:user.id,category,data:snapshot[category],updated_at:stamp()}));
-  const {error}=await getClient().from('trainlog_user_data').upsert(payload,{onConflict:'user_id,category'});
-  if(error)throw error;
-  sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
-  setBaseline();changes.forEach(k=>cloudBaseline[k]=JSON.stringify(snapshot[k]));notify('Sincronizado na cloud às '+new Date().toLocaleTimeString('pt-PT'));
+  const user=getUser(),rows=await fetchRemote(),local=localSnapshot(),remoteMap=Object.fromEntries(rows.map(r=>[r.category,r]));
+  const uploadRows=[],pull=[],conflicts=[];
+  for(const [category,key] of Object.entries(KEYS)){
+   const hasLocal=Object.hasOwn(local,category),row=remoteMap[category];
+   const localValue=hasLocal?JSON.stringify(local[category]):undefined;
+   const remoteValue=row?JSON.stringify(row.data):undefined;
+   const localChanged=localValue!==baseline[category];
+   const remoteChanged=remoteValue!==cloudBaseline[category];
+   if(!localChanged&&!remoteChanged)continue;
+   if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
+   if(localChanged&&hasLocal&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:local[category],updated_at:stamp()});continue}
+   if(remoteChanged&&row&&!localChanged){pull.push([key,row.data]);continue}
+   if(localValue===remoteValue)continue;
+   // Ausências ou remoções são ambíguas: exigir resolução explícita.
+   conflicts.push(category);
+  }
+  if(conflicts.length){
+   setAuto(false);
+   notify('Sincronização pausada: diferenças em '+conflicts.map(k=>CATEGORY_NAMES[k]||k).join(', ')+'. Usa «Comparar versões».');
+   return;
+  }
+  // Antes de gravar, confirmar que a cloud não mudou entretanto.
+  if(uploadRows.length){
+   const latest=await fetchRemote(),latestMap=Object.fromEntries(latest.map(r=>[r.category,r]));
+   if(uploadRows.some(r=>JSON.stringify(latestMap[r.category]?.data)!==cloudBaseline[r.category])){
+    setAuto(false);notify('A cloud mudou durante a gravação. Revê as versões antes de continuar.');return;
+   }
+   const {error}=await getClient().from('trainlog_user_data').upsert(uploadRows,{onConflict:'user_id,category'});
+   if(error)throw error;
+  }
+  if(pull.length){
+   // Só importar quando não houver treino em curso nem alterações locais pendentes.
+   if(window.trainlogSessionActive?.()){
+    notify('Actualização disponível na cloud. Termina o treino antes de a receber.');return;
+   }
+   localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
+   for(const [key,value] of pull)localStorage.setItem(key,JSON.stringify(value));
+  }
+  const finalRows=await fetchRemote();
+  setCloudBaseline(finalRows);setBaseline();
+  if(pull.length){notify('Dados recebidos da cloud. A actualizar a aplicação…');location.reload();return}
+  if(uploadRows.length)notify('Sincronizado na cloud às '+new Date().toLocaleTimeString('pt-PT'));
  }catch(e){notify('Sincronização pendente: '+(e.message||'erro de ligação'))}
  finally{syncing=false}
 }
@@ -69,7 +101,7 @@ function downloadBackup(){
 function openPanel(){
  document.getElementById('cloudModal')?.remove();
  const modal=document.createElement('div');modal.id='cloudModal';modal.className='cloud-overlay';
- modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização automática é opcional e funciona neste dispositivo após activação. Se houver versões diferentes, é pausada para evitar substituições silenciosas. O restauro substitui os dados locais, após confirmação.</p></section>';
+ modal.innerHTML='<section class="cloud-modal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle"><button class="cloud-close" id="cloudClose" aria-label="Fechar">×</button><p class="eyebrow">TRAINLOG CLOUD</p><h2 id="cloudTitle">Dados e sincronização</h2><p id="cloudAccount"></p><div class="cloud-message" id="cloudMessage"></div><div class="cloud-actions"><button id="cloudBackup">Descarregar backup JSON</button><button id="cloudCheck">Verificar dados na cloud</button><button id="cloudUpload">Guardar dados locais na cloud</button><button id="cloudRestore">Restaurar dados da cloud neste dispositivo</button><button id="cloudCompare">Comparar versões local e cloud</button><button id="cloudAuto">Activar sincronização automática</button><button id="cloudReset" class="cloud-danger">Repor dados de teste</button></div><div id="cloudDifferences"></div><p class="cloud-warning">A sincronização automática verifica alterações nos dois sentidos, incluindo ao regressar à aplicação. Diferenças simultâneas pausam a sincronização. O restauro manual substitui os dados locais após confirmação.</p></section>';
  document.body.appendChild(modal);
  modal.querySelector('#cloudClose').onclick=()=>modal.remove();
  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
@@ -208,6 +240,7 @@ const originalSet=Storage.prototype.setItem;
 Storage.prototype.setItem=function(key,value){const result=originalSet.call(this,key,value);if(this===localStorage&&Object.values(KEYS).includes(key))scheduleAutoSync();return result};
 window.addEventListener('online',scheduleAutoSync);
 window.addEventListener('focus',()=>{if(autoUser===getUser()?.id)scheduleAutoSync()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleAutoSync()});
 setBaseline();
 window.trainlogSync={open:openPanel,backup:downloadBackup,syncNow:()=>{if(autoUser===getUser()?.id)scheduleAutoSync()}};
 paint();
