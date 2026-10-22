@@ -133,3 +133,6 @@ select option{background:#fff;color:#202833;padding:7px 10px}
 /* Guardar plano */
 .plan-save-actions{display:flex;align-items:center;gap:13px;flex-wrap:wrap}.plan-save-actions .primary{white-space:nowrap}.plan-save-actions span.saved{color:#24834f;font-weight:700}
 @media(max-width:600px){.plan-save-actions{width:100%;flex-direction:column;align-items:stretch}.plan-save-actions button{width:100%}}
+
+/* Comparação segura das versões de dados */
+#cloudDifferences:not(:empty){margin-top:20px;border-top:1px solid #e4ebf3;padding-top:15px}#cloudDifferences h3{font-size:15px;margin:0 0 5px}#cloudDifferences>p{font-size:11px;color:#697c90;line-height:1.5}.cloud-diff{padding:12px 0;border-bottom:1px solid #edf0f5;display:grid;gap:5px}.cloud-diff>b{font-size:12px;color:#263f58}.cloud-diff>small{font-size:10px;color:#718397}.cloud-diff-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px}.cloud-diff-actions button{flex:1;min-width:140px;border:1px solid #cbdff6;background:#f2f8ff;color:#1769bd;border-radius:8px;padding:10px;font-size:10px;font-weight:700;cursor:pointer}.cloud-diff-actions button:hover{background:#e4f0ff}
