@@ -147,3 +147,19 @@ select option{background:#fff;color:#202833;padding:7px 10px}
 .sidebar>.settings-wrap{margin-top:auto;margin-bottom:13px;display:block;position:relative}.sidebar .settings-toggle{width:100%;height:auto;min-height:42px;display:flex;justify-content:flex-start;gap:12px;padding:11px 14px;border:0;border-radius:11px;background:transparent;color:#9ba9b7;font:600 13px Inter,Arial,sans-serif;text-align:left}.sidebar .settings-toggle:hover,.sidebar .settings-toggle[aria-expanded="true"]{background:#202a34;color:white}.sidebar .settings-toggle:after{content:'Definições';font-size:13px}.sidebar .settings-toggle.sync-attention:before{content:'';position:absolute;right:12px;top:12px;width:7px;height:7px;background:#e5a33e;border-radius:50%}.sidebar .settings-menu{left:calc(100% + 12px);right:auto;top:auto;bottom:0;width:310px;max-width:calc(100vw - 260px)}.sidebar .sidefoot{margin-top:0}
 @media(max-width:900px){.sidebar .settings-toggle{justify-content:center;padding:11px 0;font-size:21px}.sidebar .settings-toggle:after{display:none}.sidebar .settings-menu{max-width:calc(100vw - 110px)}}
 @media(max-width:600px){.sidebar.open .settings-toggle{justify-content:flex-start;padding:11px 14px;font-size:20px}.sidebar.open .settings-toggle:after{display:inline;font-size:13px}.sidebar .settings-menu{position:absolute;left:0;right:auto;bottom:calc(100% + 6px);top:auto;width:100%;max-width:100%;max-height:55vh;overflow:auto;box-shadow:0 10px 28px #0005}.sidebar .settings-wrap{margin-top:auto}}
+
+/* Ajuste definitivo do botão Definições, sem pseudo-elementos de texto */
+.sidebar .settings-toggle{display:flex;align-items:center;justify-content:flex-start;gap:12px;width:100%;min-width:0;padding:12px 14px;white-space:nowrap;line-height:1.2;position:relative}
+.sidebar .settings-toggle::after{content:none!important;display:none!important}
+.sidebar .settings-toggle.sync-attention::before{right:8px;top:7px}
+.settings-icon{flex:0 0 20px;font-size:20px;line-height:1;text-align:center}
+.settings-label{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){.sidebar:not(.open) .settings-toggle{justify-content:center;padding:12px 0}.sidebar:not(.open) .settings-label{display:none}}
+@media(max-width:600px){.sidebar.open .settings-toggle{justify-content:flex-start;padding:12px 14px}.sidebar.open .settings-label{display:inline}}
+/* Acções de treino e recuperação de sessão pendente */
+.session-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-bottom:15px}
+.session-actions button,.resume-notice-actions button{border:1px solid #bcd7f7;background:#edf5ff;color:#1467c3;border-radius:9px;padding:10px 13px;font:700 11px Inter,Arial,sans-serif;cursor:pointer}
+.session-actions .session-discard,.resume-notice-actions button:last-child{background:#fff7f5;border-color:#f0d6d2;color:#ad5149}
+.resume-notice{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 4vw 12px;padding:14px 18px;background:#fff;border:1px solid #dce8f7;border-left:3px solid var(--accent);border-radius:12px}
+.resume-notice b,.resume-notice small{display:block}.resume-notice b{font-size:12px;color:#22384f}.resume-notice small{margin-top:5px;font-size:11px;color:#6a7c90}.resume-notice-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:600px){.session-actions{justify-content:stretch}.session-actions button{flex:1}.resume-notice{margin:8px 15px 12px;align-items:stretch;flex-direction:column}.resume-notice-actions button{flex:1}}
