@@ -115,9 +115,11 @@ async function automaticSync(){
   if(pull.length){
    // Só importar quando não houver treino em curso nem alterações locais pendentes.
    const currentActive=localSnapshot().active_session;
-   if(currentActive?.session&&pull.some(([key,value])=>key!==KEYS.active_session||value?.session)){
+   if(currentActive?.session&&pull.some(([key])=>key!==KEYS.active_session)){
     notify('Actualização disponível na cloud. Termina o treino antes de a receber.');return;
    }
+   const now=localSnapshot();
+   if(pull.some(([key])=>serial(now[Object.keys(KEYS).find(k=>KEYS[k]===key)])!==serial(local[Object.keys(KEYS).find(k=>KEYS[k]===key)]))){notify('Existem alterações recentes neste dispositivo. A sincronização será repetida.');return}
    localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
    for(const [key,value] of pull)localStorage.setItem(key,JSON.stringify(value));
   }
