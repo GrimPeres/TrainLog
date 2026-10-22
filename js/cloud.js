@@ -8,16 +8,25 @@ const KEYS={
  active_session:'trainlog_active_session_v1'
 };
 const status=document.getElementById('cloudStatus');
+const settingsToggle=document.getElementById('settingsToggle'),settingsMenu=document.getElementById('settingsMenu');
+function closeSettings(){if(!settingsMenu)return;settingsMenu.hidden=true;settingsToggle?.setAttribute('aria-expanded','false')}
+settingsToggle?.addEventListener('click',()=>{settingsMenu.hidden=!settingsMenu.hidden;settingsToggle.setAttribute('aria-expanded',String(!settingsMenu.hidden))});
+document.getElementById('settingsCloud')?.addEventListener('click',()=>{closeSettings();openPanel()});
+document.getElementById('settingsAccount')?.addEventListener('click',()=>{closeSettings();window.trainlogAccount?.()});
+document.addEventListener('click',e=>{if(!e.target.closest('.settings-wrap'))closeSettings()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSettings()});
 let busy=false,remote=null,remoteUser=null,lastMessage='',syncTimer=null,syncing=false;
 const AUTO_STORE='trainlog_auto_sync_v1';
 let autoUser=localStorage.getItem(AUTO_STORE)||'';
 let baseline={},cloudBaseline={},pollTimer=null,readyUser=null,initializing=false;
 const stamp=()=>new Date().toISOString();
 function setAuto(enabled){autoUser=enabled?(getUser()?.id||''):'';if(autoUser)localStorage.setItem(AUTO_STORE,autoUser);else localStorage.removeItem(AUTO_STORE);if(pollTimer)clearInterval(pollTimer);pollTimer=autoUser?setInterval(automaticSync,30000):null;paint();renderModal()}
-function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>JSON.stringify(v)!==baseline[k]).map(([k])=>k)}
-function setBaseline(){const s=localSnapshot();baseline=Object.fromEntries(Object.entries(s).map(([k,v])=>[k,JSON.stringify(v)]))}
-function setCloudBaseline(rows){cloudBaseline=Object.fromEntries(rows.map(r=>[r.category,JSON.stringify(r.data)]))}
-function same(a,b){return JSON.stringify(a)===JSON.stringify(b)}
+function changedCategories(){const current=localSnapshot();return Object.entries(current).filter(([k,v])=>serial(v)!==baseline[k]).map(([k])=>k)}
+function setBaseline(){const s=localSnapshot();baseline=Object.fromEntries(Object.entries(s).map(([k,v])=>[k,serial(v)]))}
+function setCloudBaseline(rows){cloudBaseline=Object.fromEntries(rows.map(r=>[r.category,serial(r.data)]))}
+function canonical(v){if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==='object')return Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])]));return v}
+function serial(v){return JSON.stringify(canonical(v))}
+function same(a,b){return serial(a)===serial(b)}
 async function automaticSync(){
  if(syncing||busy||!navigator.onLine||!getUser()||autoUser!==getUser().id||readyUser!==getUser().id)return;
  syncing=true;
@@ -26,8 +35,8 @@ async function automaticSync(){
   const uploadRows=[],pull=[],conflicts=[];
   for(const [category,key] of Object.entries(KEYS)){
    const hasLocal=Object.hasOwn(local,category),row=remoteMap[category];
-   const localValue=hasLocal?JSON.stringify(local[category]):undefined;
-   const remoteValue=row?JSON.stringify(row.data):undefined;
+   const localValue=hasLocal?serial(local[category]):undefined;
+   const remoteValue=row?serial(row.data):undefined;
    const localChanged=localValue!==baseline[category];
    const remoteChanged=remoteValue!==cloudBaseline[category];
    if(!localChanged&&!remoteChanged)continue;
@@ -46,7 +55,7 @@ async function automaticSync(){
   // Antes de gravar, confirmar que a cloud não mudou entretanto.
   if(uploadRows.length){
    const latest=await fetchRemote(),latestMap=Object.fromEntries(latest.map(r=>[r.category,r]));
-   if(uploadRows.some(r=>JSON.stringify(latestMap[r.category]?.data)!==cloudBaseline[r.category])){
+   if(uploadRows.some(r=>serial(latestMap[r.category]?.data)!==cloudBaseline[r.category])){
     setAuto(false);notify('A cloud mudou durante a gravação. Revê as versões antes de continuar.');return;
    }
    const {error}=await getClient().from('trainlog_user_data').upsert(uploadRows,{onConflict:'user_id,category'});
@@ -79,7 +88,7 @@ async function initializeCloud(){
   const different=Object.keys(local).filter(k=>Object.hasOwn(map,k)&&!same(local[k],map[k]));
   if(different.length){
    readyUser=null;setAuto(false);
-   notify('Há '+different.length+' categorias com versões diferentes. Abre «Sincronização → Comparar versões» para escolher quais manter.');
+   notify('Diferenças em: '+different.map(k=>CATEGORY_NAMES[k]||k).join(', ')+'. Compara as versões nas definições.');
    return;
   }
   setBaseline();setCloudBaseline(rows);readyUser=user.id;setAuto(true);
@@ -91,7 +100,7 @@ async function initializeCloud(){
 function enableAuto(){run(async()=>{
  const user=getUser(),rows=await fetchRemote();
  if(!confirm('Activar sincronização automática neste dispositivo? Primeiro confirma que os dados locais são a versão correcta. Se houver dados diferentes na cloud, recomenda-se restaurar ou rever antes.'))return;
- const current=localSnapshot(),conflicts=rows.filter(r=>Object.hasOwn(current,r.category)&&JSON.stringify(current[r.category])!==JSON.stringify(r.data));
+ const current=localSnapshot(),conflicts=rows.filter(r=>Object.hasOwn(current,r.category)&&serial(current[r.category])!==serial(r.data));
  if(conflicts.length){notify('Existem '+conflicts.length+' categorias diferentes. Escolhe a versão a manter em «Comparar versões».');setTimeout(compareVersions,0);return}
  setBaseline();setCloudBaseline(rows);sessionStorage.setItem('trainlog_last_cloud_sync',String(Date.now()));
  setAuto(true);notify('Sincronização automática activada neste dispositivo.');scheduleAutoSync()
@@ -107,8 +116,8 @@ function notify(message){lastMessage=message;paint()}
 function paint(){
  if(!status)return;
  const user=getUser();
- status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?'connected':'')+'"></span><span>'+(busy?'A processar…':user?(readyUser===user.id?'Sincronização automática activa':'Conta ligada · a verificar dados'):'Sem sessão na cloud')+'</span><button type="button" id="cloudOpen">Sincronização</button></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
- status.querySelector('#cloudOpen').onclick=openPanel;
+ status.innerHTML='<div class="cloud-line"><span class="cloud-dot '+(busy?'working':user?(readyUser===user.id?'connected':'working'):'')+'"></span><span>'+(busy?'A processar…':user?(readyUser===user.id?'Sincronização automática activa':'Sincronização requer atenção'):'Sem sessão na cloud')+'</span></div>'+(lastMessage?'<small>'+esc(lastMessage)+'</small>':'');
+ if(settingsToggle){settingsToggle.classList.toggle('sync-attention',!!user&&readyUser!==user.id);settingsToggle.title=lastMessage||'Opções e definições'}
 }
 function downloadBackup(){
  const payload={format:'trainlog-backup',version:1,createdAt:new Date().toISOString(),data:localSnapshot()};
@@ -170,7 +179,7 @@ async function compareVersions(){
   const categories=[...new Set([...Object.keys(local),...rows.map(r=>r.category)])].filter(k=>Object.hasOwn(KEYS,k));
   container.innerHTML='<h3>Comparação por categoria</h3><p>Escolhe qual a versão a manter em cada categoria. Descarrega primeiro um backup JSON.</p>'+categories.map(category=>{
    const row=rows.find(r=>r.category===category),hasLocal=Object.hasOwn(local,category);
-   const equal=hasLocal&&row&&JSON.stringify(local[category])===JSON.stringify(row.data);
+   const equal=hasLocal&&row&&serial(local[category])===serial(row.data);
    const state=equal?'✓ Iguais':!row?'Apenas neste dispositivo':!hasLocal?'Apenas na cloud':'⚠ Diferentes';
    return '<div class="cloud-diff"><b>'+esc(CATEGORY_NAMES[category]||category)+'</b><small>'+state+(row?' · Cloud: '+new Date(row.updated_at).toLocaleString('pt-PT'):'')+'</small>'+
     (!equal?'<div class="cloud-diff-actions">'+(hasLocal?'<button type="button" data-choice="local" data-category="'+category+'">Manter local → cloud</button>':'')+(row?'<button type="button" data-choice="cloud" data-category="'+category+'">Usar cloud → local</button>':'')+'</div>':'')+'</div>'
@@ -192,7 +201,7 @@ async function resolveCategory(category,choice){
    if(!row)throw Error('Sem dados na cloud nesta categoria.');
    if(!confirm('Substituir os dados locais de «'+name+'» pela versão da cloud? A página será recarregada.'))return;
    localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:stamp(),data:local}));
-   localStorage.setItem(KEYS[category],JSON.stringify(row.data));
+   localStorage.setItem(KEYS[category],serial(row.data));
    location.reload();return;
   }
   setBaseline();setCloudBaseline(await fetchRemote());notify('Categoria «'+name+'» actualizada.'); 
@@ -250,7 +259,7 @@ async function restore(){await run(async()=>{
  localStorage.setItem('trainlog_pre_restore_backup_v1',JSON.stringify({createdAt:new Date().toISOString(),data:snapshot}));
  for(const [category,key] of Object.entries(KEYS)){
   const row=rows.find(x=>x.category===category);
-  if(row)localStorage.setItem(key,JSON.stringify(row.data));
+  if(row)localStorage.setItem(key,serial(row.data));
   else localStorage.removeItem(key);
  }
  notify('Dados restaurados. A aplicação vai recarregar.');
