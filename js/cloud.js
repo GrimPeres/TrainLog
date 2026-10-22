@@ -21,6 +21,8 @@ let autoUser=localStorage.getItem(AUTO_STORE)||'';
 let baseline={},cloudBaseline={},pollTimer=null,readyUser=null,initializing=false;
 const BASE_STORE='trainlog_sync_baseline_v2';
 const NO_ACTIVE={status:'cleared'};
+function activeId(v){return v?.session?.id??null}
+function clearedFor(v,session){return isCleared(v)&&(v.sessionId==null||String(v.sessionId)===String(activeId(session)))}
 function isCleared(v){return v===null||v?.status==='cleared'}
 function saveCheckpoint(){const user=getUser();if(user&&readyUser===user.id)localStorage.setItem(BASE_STORE+':'+user.id,JSON.stringify({local:baseline,cloud:cloudBaseline}))}
 function readCheckpoint(user){try{const x=JSON.parse(localStorage.getItem(BASE_STORE+':'+user.id)||'null');return x&&x.local&&x.cloud?x:null}catch{return null}}
@@ -46,14 +48,15 @@ async function automaticSync(){
    const remoteChanged=remoteValue!==cloudBaseline[category];
    // Uma sessão anulada é representada por null. A anulação prevalece
    // sobre uma cópia antiga do mesmo treino noutro dispositivo.
-   if(category==='active_session'&&row&&isCleared(row.data)&&hasLocal&&!isCleared(local.active_session)){
+   if(category==='active_session'&&row&&isCleared(row.data)&&hasLocal&&!isCleared(local.active_session)&&clearedFor(row.data,local.active_session)&&!localChanged){
     if(hasLocal&&localValue!==undefined)pull.push([key,NO_ACTIVE]);
     continue;
    }
-   if(category==='active_session'&&hasLocal&&isCleared(local.active_session)&&row&&!isCleared(row.data)){
+   if(category==='active_session'&&hasLocal&&isCleared(local.active_session)&&row&&!isCleared(row.data)&&clearedFor(local.active_session,row.data)){
     uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});
     continue;
    }
+   if(category==='active_session'&&hasLocal&&local.active_session?.session&&row&&isCleared(row.data)&&localChanged){uploadRows.push({user_id:user.id,category,data:local.active_session,updated_at:stamp()});continue}
    if(!localChanged&&!remoteChanged)continue;
    if(localChanged&&remoteChanged&&localValue!==remoteValue){conflicts.push(category);continue}
    if(localChanged&&!hasLocal&&category==='active_session'&&!remoteChanged){uploadRows.push({user_id:user.id,category,data:NO_ACTIVE,updated_at:stamp()});continue}
@@ -106,13 +109,13 @@ async function clearActiveEverywhere(){
   location.reload();
  })
 }
-async function cancelActiveSession(){
+async function cancelActiveSession(sessionId){
  const user=getUser();if(!user||!getClient())return;
  try{
-  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:NO_ACTIVE,updated_at:stamp()},{onConflict:'user_id,category'});
+  const {error}=await getClient().from('trainlog_user_data').upsert({user_id:user.id,category:'active_session',data:{status:'cleared',sessionId:sessionId??null},updated_at:stamp()},{onConflict:'user_id,category'});
   if(error)throw error;
   const rows=await fetchRemote();
-  cloudBaseline.active_session=serial(NO_ACTIVE);baseline.active_session=serial(NO_ACTIVE);saveCheckpoint();
+  cloudBaseline.active_session=serial({status:'cleared',sessionId:sessionId??null});baseline.active_session=serial({status:'cleared',sessionId:sessionId??null});saveCheckpoint();
   notify('Treino descartado e anulação confirmada na cloud.');
  }catch(e){notify('Treino descartado localmente. Anulação na cloud pendente: '+(e.message||'sem ligação'));scheduleAutoSync()}
 }
@@ -128,7 +131,7 @@ async function initializeCloud(){
   const checkpoint=readCheckpoint(user);
   if(checkpoint){baseline=checkpoint.local;cloudBaseline=checkpoint.cloud;readyUser=user.id;setAuto(true);scheduleAutoSync();notify('A verificar alterações pendentes…');return}
   // Resolver uma sessão já anulada na cloud antes da comparação inicial.
-  if(Object.hasOwn(map,'active_session')&&isCleared(map.active_session)&&local.active_session?.session){
+  if(Object.hasOwn(map,'active_session')&&isCleared(map.active_session)&&local.active_session?.session&&clearedFor(map.active_session,local.active_session)&&!readCheckpoint(user)){
    localStorage.setItem(KEYS.active_session,JSON.stringify(NO_ACTIVE));
    local.active_session=NO_ACTIVE;
   }
