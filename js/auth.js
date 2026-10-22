@@ -7,6 +7,9 @@ const root=document.getElementById('authRoot');
 let client=null,user=null,mode='login',busy=false,feedback='',feedbackOk=false;
 const escText=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button=document.getElementById('accountButton');
+function passwordField(name,label,autocomplete){
+ return '<label>'+label+'<span class="auth-password-wrap"><input name="'+name+'" type="password" minlength="'+(mode==='login'?6:8)+'" autocomplete="'+autocomplete+'" required><button class="auth-eye" type="button" aria-label="Mostrar palavra-passe" aria-pressed="false" title="Mostrar palavra-passe">Mostrar</button></span></label>'
+}
 function show(){
  if(!root)return;
  root.hidden=false;
@@ -17,12 +20,19 @@ function show(){
  '<h2>'+(mode==='signup'?'Criar conta':mode==='reset'?'Recuperar password':mode==='newpassword'?'Definir nova password':'Bem-vindo de volta')+'</h2>'+
  '<p>'+(mode==='signup'?'Cria a tua conta para preparar a sincronização.':mode==='reset'?'Vamos enviar um email com um link de recuperação.':mode==='newpassword'?'Escolhe uma nova password para a tua conta.':'Inicia sessão para aceder ao TrainLog.')+'</p>'+
  '<form id="authForm">'+(mode==='newpassword'?'':'<label>Email<input name="email" type="email" autocomplete="email" required></label>')+
- (mode==='reset'?'':'<label>Password<input name="password" type="password" minlength="6" autocomplete="'+(mode==='login'?'current-password':'new-password')+'" required></label>')+
+ (mode==='reset'?'':passwordField('password',mode==='login'?'Palavra-passe':'Palavra-passe (mínimo 8 caracteres)',mode==='login'?'current-password':'new-password'))+
+ ((mode==='signup'||mode==='newpassword')?passwordField('confirmPassword','Confirmar palavra-passe','new-password'):'')+
  '<button class="auth-submit" type="submit" '+(busy?'disabled':'')+'>'+(busy?'Aguarda…':mode==='signup'?'Criar conta':mode==='reset'?'Enviar email':mode==='newpassword'?'Guardar password':'Entrar')+'</button></form>'+
  '<div class="auth-links">'+(mode==='login'?'<button id="authSignup">Criar conta</button><button id="authReset">Esqueci-me da password</button>':'<button id="authLogin">Voltar ao login</button>')+'</div>')+
  (feedback?'<div class="auth-feedback '+(feedbackOk?'ok':'')+'" role="status">'+escText(feedback)+'</div>':'')+
  '<p class="auth-local-note">Os registos actuais permanecem neste browser. Ainda não são enviados para a cloud; não elimines os dados locais.</p></div>';
  root.querySelector('#authForm')?.addEventListener('submit',submit);
+ root.querySelectorAll('.auth-eye').forEach(b=>b.addEventListener('click',()=>{
+  const input=b.parentElement.querySelector('input'),visible=input.type==='password';
+  input.type=visible?'text':'password';b.textContent=visible?'Ocultar':'Mostrar';
+  b.setAttribute('aria-label',visible?'Ocultar palavra-passe':'Mostrar palavra-passe');
+  b.setAttribute('aria-pressed',String(visible));input.focus();
+ }));
  root.querySelector('#authSignup')?.addEventListener('click',()=>switchMode('signup'));
  root.querySelector('#authReset')?.addEventListener('click',()=>switchMode('reset'));
  root.querySelector('#authLogin')?.addEventListener('click',()=>switchMode('login'));
@@ -35,6 +45,7 @@ function errorMessage(e){return e?.message||'Não foi possível concluir a opera
 async function submit(e){
  e.preventDefault();if(busy||!client)return;
  const data=new FormData(e.currentTarget),email=String(data.get('email')||'').trim(),password=String(data.get('password')||'');
+ if((mode==='signup'||mode==='newpassword')&&password!==String(data.get('confirmPassword')||'')){feedback='As palavras-passe não coincidem. Verifica os dois campos.';feedbackOk=false;show();return}
  busy=true;feedback='';show();
  try{
   let result;
